@@ -1,28 +1,34 @@
+
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-# Step 1: Load the PDF
-pdf_path = "data/Ebook-Agentic-AI.pdf"
+PDF_PATH = "data/Ebook-Agentic-AI.pdf"
 
-loader = PyPDFLoader(pdf_path)
-documents = loader.load()
 
-print("Total pages:", len(documents))
+def load_and_split_pdf():
+    loader = PyPDFLoader(PDF_PATH)
+    pages = loader.load()
 
-# Step 2: Split the text into chunks
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000,
-    chunk_overlap=200
-)
+    print(f"Total pages loaded: {len(pages)}")
 
-chunks = text_splitter.split_documents(documents)
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200
+    )
 
-print("Total chunks:", len(chunks))
+    chunks = text_splitter.split_documents(pages)
 
-# Step 3: Display the first chunk
-if chunks:
-    print("\nFirst chunk:")
-    print(chunks[0].page_content)
+    print(f"Total chunks created: {len(chunks)}")
 
-    print("\nChunk metadata:")
-    print(chunks[0].metadata)
+    if chunks:
+        print("\nFirst chunk preview:")
+        print(chunks[0].page_content[:500])
+
+        print("\nFirst chunk metadata:")
+        print(chunks[0].metadata)
+
+    return chunks
+
+
+if __name__ == "__main__":
+    chunks = load_and_split_pdf()

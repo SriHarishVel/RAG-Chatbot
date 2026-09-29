@@ -1,84 +1,49 @@
+
 import os
-import time
+
 from dotenv import load_dotenv
-
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
+from pinecone import Pinecone
 
-# Load environment variables
+from src.ingestion import load_and_split_pdf
+from src.embeddings import embeddings
+
 load_dotenv()
 
-index_name = os.getenv("PINECONE_INDEX_NAME")
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+PINECONE_INDEX_NAME = os.getenv(
+    "PINECONE_INDEX_NAME",
+    "agentic-ai-index"
+)
 
-if not os.getenv("PINECONE_API_KEY"):
+if not PINECONE_API_KEY:
     raise ValueError("Pinecone API key not found in .env")
 
-if not os.getenv("GEMINI_API_KEY"):
-    raise ValueError("Gemini API key not found in .env")
 
-if not index_name:
-    raise ValueError("PINECONE_INDEX_NAME not found in .env")
+def upload_documents():
+    print("Loading and splitting the PDF...")
 
-# Initialize Gemini embeddings
-embeddings = GoogleGenerativeAIEmbeddings(
-    model="models/gemini-embedding-001",
-    google_api_key=os.getenv("GEMINI_API_KEY"),
-    output_dimensionality=1536
-)
+    chunks = load_and_split_pdf()
 
-# Load PDF
-loader = PyPDFLoader("data/Ebook-Agentic-AI.pdf")
-documents = loader.load()
+    if not chunks:
+        print("No document chunks found.")
+        return
 
-print("Pages loaded:", len(documents))
+    print(f"Uploading {len(chunks)} chunks to Pinecone...")
 
-# Split PDF into chunks
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000,
-    chunk_overlap=200
-)
+    pc = Pinecone(api_key=PINECONE_API_KEY)
 
-chunks = text_splitter.split_documents(documents)
+    index = pc.Index(PINECONE_INDEX_NAME)
 
-print("Total chunks:", len(chunks))
-
-# Connect to existing Pinecone index
-vector_store = PineconeVectorStore(
-    index_name=index_name,
-    embedding=embeddings
-)
-
-# Upload in small batches
-batch_size = 20
-total_batches = (len(chunks) + batch_size - 1) // batch_size
-
-for start in range(0, len(chunks), batch_size):
-    batch_number = start // batch_size + 1
-
-    batch = chunks[start:start + batch_size]
-
-    # Fixed IDs prevent duplicate records when retrying
-    ids = [
-        f"ebook-chunk-{i}"
-        for i in range(start, start + len(batch))
-    ]
-
-    print(
-        f"\nUploading batch {batch_number}/{total_batches}"
+    vector_store = PineconeVectorStore(
+        index=index,
+        embedding=embeddings
     )
 
-    vector_store.add_documents(
-        documents=batch,
-        ids=ids
-    )
+    vector_store.add_documents(chunks)
 
-    print("Batch uploaded successfully.")
+    print("Documents uploaded successfully!")
 
-    # Pause between batches to respect Gemini's free-tier limit
-    if start + batch_size < len(chunks):
-        print("Waiting 65 seconds for rate limit...")
-        time.sleep(65)
 
-print("\nAll chunks uploaded successfully!")
+if __name__ == "__main__":
+    upload_documents()
